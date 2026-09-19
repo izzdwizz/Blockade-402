@@ -1,7 +1,16 @@
 pyproject.toml
 app/__init__.py
+app/chain.py
+app/config.py
+app/llm.py
+app/main.py
+app/models.py
+app/session.py
+app/x402.py
 arc_llm_paywall_middleware.egg-info/PKG-INFO
 arc_llm_paywall_middleware.egg-info/SOURCES.txt
 arc_llm_paywall_middleware.egg-info/dependency_links.txt
 arc_llm_paywall_middleware.egg-info/requires.txt
 arc_llm_paywall_middleware.egg-info/top_level.txt
+tests/test_llm.py
+tests/test_x402.py

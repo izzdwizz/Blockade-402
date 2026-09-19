@@ -1,7 +1,9 @@
 from unittest.mock import MagicMock
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
+from openai import APIError
 
 from app.chain import ChainClient, PaymentEvent
 from app.config import Settings
@@ -15,12 +17,15 @@ def settings() -> Settings:
         arc_rpc_url="http://localhost:8545",
         contract_address="0x0000000000000000000000000000000000dEaD",
         openai_api_key="sk-test",
+        llm_base_url="",
+        llm_model="gpt-4o-mini",
         resource_address="0x00000000000000000000000000000000001234",
         price_usdc=5_000,
         chain_id=999,
         free_input_char_cap=20,
         free_max_tokens=60,
         paid_session_ttl_seconds=3600,
+        cors_origins=["http://localhost:5173"],
     )
 
 
@@ -110,3 +115,19 @@ def test_wrong_amount_rejected(client, settings, mock_chain_client):
         "/ask", params={"prompt": long_prompt, "wallet": "0xAbC", "tx_hash": "0xabc"}
     )
     assert response.status_code == 402
+
+
+def test_llm_provider_error_returns_502_with_cors_headers(client, monkeypatch):
+    def raise_api_error(settings, prompt, full=True):
+        request = httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions")
+        raise APIError("invalid api key", request=request, body=None)
+
+    monkeypatch.setattr("app.main.ask_llm", raise_api_error)
+
+    response = client.get(
+        "/ask",
+        params={"prompt": "short question"},
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert response.status_code == 502
+    assert response.headers["access-control-allow-origin"] == "http://localhost:5173"

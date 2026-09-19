@@ -1,6 +1,7 @@
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from openai import APIError
 
 from .chain import ChainClient, get_chain_client
 from .config import Settings, get_settings
@@ -13,7 +14,7 @@ app = FastAPI(title="Arc LLM Paywall")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*","http://localhost:5173", "http://localhost:5173/*"],
+    allow_origins=get_settings().cors_origins,
     allow_methods=["GET"],
     allow_headers=["*"],
 )
@@ -56,5 +57,11 @@ def ask(
         terms = build_challenge(settings, prompt)
         return JSONResponse(status_code=402, content=terms.model_dump())
 
-    answer = ask_llm(settings, prompt, full=is_paid)
+    try:
+        answer = ask_llm(settings, prompt, full=is_paid)
+    except APIError as exc:
+        # Caught here (rather than left to propagate) so CORSMiddleware still gets
+        # a chance to attach headers — Starlette drops them on unhandled exceptions.
+        return JSONResponse(status_code=502, content={"error": f"LLM provider error: {exc}"})
+
     return AskResponse(response=answer, tier="paid" if is_paid else "free")

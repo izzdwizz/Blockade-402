@@ -3,6 +3,7 @@ uvicorn[standard]>=0.30
 web3>=7.0
 openai>=1.40
 pydantic>=2.8
+python-dotenv>=1.0
 
 [dev]
 pytest>=8.0
