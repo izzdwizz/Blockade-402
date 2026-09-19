@@ -1,0 +1,23 @@
+# contracts
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+contracts/lib/
+
+# middleware
+middleware/.venv/
+middleware/__pycache__/
+middleware/**/__pycache__/
+middleware/.pytest_cache/
+
+# frontend
+frontend/node_modules/
+frontend/dist/
+
+# env files
+.env
+**/.env
+!**/.env.example
+
+# OS
+.DS_Store
