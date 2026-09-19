@@ -1,11 +1,7 @@
 from unittest.mock import MagicMock, patch
 
-import pytest
-from fastapi.testclient import TestClient
-
-from app.chain import ChainClient, PaymentEvent
 from app.config import Settings
-from app.main import app, get_chain_client_dep, get_settings_dep
+from app.llm import ask_llm
 
 
 def make_settings() -> Settings:
@@ -14,58 +10,50 @@ def make_settings() -> Settings:
         contract_address="0x0000000000000000000000000000000000dEaD",
         openai_api_key="sk-test",
         resource_address="0x00000000000000000000000000000000001234",
-        price_usdc=10_000,
+        price_usdc=5_000,
         chain_id=999,
+        free_input_char_cap=200,
+        free_max_tokens=60,
+        paid_session_ttl_seconds=3600,
     )
 
 
-def test_llm_wrapper_returns_text_response():
-    from app.llm import ask_llm
-
+def make_mock_client(content: str) -> MagicMock:
     mock_client = MagicMock()
     mock_client.chat.completions.create.return_value.choices = [
-        MagicMock(message=MagicMock(content="hello from the model"))
+        MagicMock(message=MagicMock(content=content))
     ]
+    return mock_client
+
+
+def test_llm_wrapper_returns_text_response():
+    mock_client = make_mock_client("hello from the model")
 
     with patch("app.llm.get_openai_client", return_value=mock_client):
-        result = ask_llm(make_settings(), "say hi")
+        result = ask_llm(make_settings(), "say hi", full=True)
 
     assert result == "hello from the model"
     mock_client.chat.completions.create.assert_called_once()
 
 
-def test_llm_only_called_after_verification():
+def test_free_tier_caps_response_length_and_adds_system_prompt():
     settings = make_settings()
-    mock_chain_client = MagicMock(spec=ChainClient)
-    app.dependency_overrides[get_settings_dep] = lambda: settings
-    app.dependency_overrides[get_chain_client_dep] = lambda: mock_chain_client
-    client = TestClient(app)
+    mock_client = make_mock_client("short answer")
 
-    try:
-        with patch("app.main.ask_llm") as mock_ask_llm:
-            # Unpaid request: no tx_hash at all.
-            client.get("/ask", params={"prompt": "hello"})
-            mock_ask_llm.assert_not_called()
+    with patch("app.llm.get_openai_client", return_value=mock_client):
+        ask_llm(settings, "say hi", full=False)
 
-            # Payment that fails verification (event missing).
-            mock_chain_client.mark_tx_used.return_value = True
-            mock_chain_client.get_payment_settled_event.return_value = None
-            client.get("/ask", params={"prompt": "hello", "tx_hash": "0xabc"})
-            mock_ask_llm.assert_not_called()
+    _, kwargs = mock_client.chat.completions.create.call_args
+    assert kwargs["max_tokens"] == settings.free_max_tokens
+    assert kwargs["messages"][0]["role"] == "system"
 
-            # Payment that verifies successfully.
-            from app.x402 import compute_request_hash
 
-            mock_chain_client.mark_tx_used.return_value = True
-            mock_chain_client.get_payment_settled_event.return_value = PaymentEvent(
-                payer="0xPayer",
-                resource=settings.resource_address,
-                request_hash=compute_request_hash(settings.resource_address, "hello"),
-                amount=settings.price_usdc,
-                timestamp=1234567890,
-            )
-            mock_ask_llm.return_value = "42"
-            client.get("/ask", params={"prompt": "hello", "tx_hash": "0xdef"})
-            mock_ask_llm.assert_called_once()
-    finally:
-        app.dependency_overrides.clear()
+def test_paid_tier_has_no_token_cap():
+    mock_client = make_mock_client("a very long answer")
+
+    with patch("app.llm.get_openai_client", return_value=mock_client):
+        ask_llm(make_settings(), "say hi", full=True)
+
+    _, kwargs = mock_client.chat.completions.create.call_args
+    assert kwargs["max_tokens"] is None
+    assert kwargs["messages"] == [{"role": "user", "content": "say hi"}]
