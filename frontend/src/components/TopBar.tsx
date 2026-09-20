@@ -17,7 +17,7 @@ export function TopBar({
       <div className="container topbar__inner">
         <div className="topbar__left">
           <Link to="/" className="topbar__wordmark">
-            BlockAid<sup>®</sup>
+            Block-x-Aid<sup>®</sup>
           </Link>
           <span className="topbar__divider" />
           <span className="topbar__demo-tag">Arc Ask — live demo</span>

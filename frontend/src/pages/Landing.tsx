@@ -41,7 +41,7 @@ export function Landing() {
       <nav className="landing__nav py-4">
         <div className="container landing__nav-inner">
           <span className="landing__wordmark">
-            BlockAid<sup>®</sup>
+            Block-x-Aid<sup>®</sup>
           </span>
           <div className="landing__nav-links">
             <a href="#how-it-works">How it works</a>
