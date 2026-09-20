@@ -12,3 +12,7 @@ class PaymentTerms(BaseModel):
 class AskResponse(BaseModel):
     response: str
     tier: str  # "free" | "paid"
+
+
+class UnlockResponse(BaseModel):
+    unlocked: bool

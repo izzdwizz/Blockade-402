@@ -23,12 +23,11 @@ class Settings:
     llm_base_url: str  # empty = OpenAI's default; set to point at an OpenAI-compatible provider (e.g. Groq)
     llm_model: str
     resource_address: str
-    price_usdc: int  # flat price in USDC base units (6 decimals)
     chain_id: int
-    free_input_char_cap: int  # free-tier question length limit
-    free_max_tokens: int  # free-tier response length limit
-    paid_session_ttl_seconds: int  # how long a wallet stays "paid" after one payment
+    free_max_tokens: int  # free/brief-tier response length limit
+    paid_session_ttl_seconds: int  # how long a wallet stays unlocked for a tile after paying
     cors_origins: list[str]
+    redis_url: str  # Render injects this automatically when a Key Value service is linked
 
 
 @lru_cache
@@ -40,9 +39,7 @@ def get_settings() -> Settings:
         llm_base_url=os.environ.get("LLM_BASE_URL", ""),
         llm_model=os.environ.get("LLM_MODEL", "gpt-4o-mini"),
         resource_address=os.environ.get("RESOURCE_ADDRESS", ""),
-        price_usdc=int(os.environ.get("PRICE_USDC", "10000")),
         chain_id=int(os.environ.get("ARC_CHAIN_ID", "0")),
-        free_input_char_cap=int(os.environ.get("FREE_INPUT_CHAR_CAP", "200")),
         free_max_tokens=int(os.environ.get("FREE_MAX_TOKENS", "60")),
         paid_session_ttl_seconds=int(os.environ.get("PAID_SESSION_TTL_SECONDS", "3600")),
         cors_origins=[
@@ -50,4 +47,5 @@ def get_settings() -> Settings:
             for origin in os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",")
             if origin.strip()
         ],
+        redis_url=os.environ.get("REDIS_URL", "redis://localhost:6379/0"),
     )

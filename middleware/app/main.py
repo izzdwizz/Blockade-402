@@ -6,11 +6,12 @@ from openai import APIError
 from .chain import ChainClient, get_chain_client
 from .config import Settings, get_settings
 from .llm import ask_llm
-from .models import AskResponse
-from .session import PaidSessionStore, get_session_store
+from .models import AskResponse, UnlockResponse
+from .tile_store import TileUnlockStore, get_tile_unlock_store
+from .tiles import TILES
 from .x402 import PaymentVerificationError, build_challenge, verify_payment
 
-app = FastAPI(title="Arc LLM Paywall")
+app = FastAPI(title="Arc-402")
 
 app.add_middleware(
     CORSMiddleware,
@@ -28,34 +29,52 @@ def get_chain_client_dep() -> ChainClient:
     return get_chain_client()
 
 
-def get_session_store_dep() -> PaidSessionStore:
-    return get_session_store()
+def get_tile_store_dep() -> TileUnlockStore:
+    return get_tile_unlock_store()
+
+
+@app.get("/unlock/{tile_id}")
+def unlock(
+    tile_id: str,
+    wallet: str,
+    tx_hash: str | None = None,
+    settings: Settings = Depends(get_settings_dep),
+    chain_client: ChainClient = Depends(get_chain_client_dep),
+    store: TileUnlockStore = Depends(get_tile_store_dep),
+):
+    if tile_id not in TILES:
+        return JSONResponse(status_code=404, content={"error": "unknown tile"})
+
+    if store.is_unlocked(wallet, tile_id):
+        return UnlockResponse(unlocked=True)
+
+    if tx_hash is None:
+        terms = build_challenge(settings, tile_id, wallet, "")
+        return JSONResponse(status_code=402, content=terms.model_dump())
+
+    try:
+        verify_payment(chain_client, settings, tx_hash, tile_id, wallet, "")
+    except PaymentVerificationError as exc:
+        terms = build_challenge(settings, tile_id, wallet, "")
+        return JSONResponse(status_code=402, content={**terms.model_dump(), "error": str(exc)})
+
+    store.mark_unlocked(wallet, tile_id)
+    return UnlockResponse(unlocked=True)
 
 
 @app.get("/ask")
 def ask(
     prompt: str,
     wallet: str | None = None,
-    tx_hash: str | None = None,
     settings: Settings = Depends(get_settings_dep),
-    chain_client: ChainClient = Depends(get_chain_client_dep),
-    sessions: PaidSessionStore = Depends(get_session_store_dep),
+    store: TileUnlockStore = Depends(get_tile_store_dep),
 ):
-    is_paid = wallet is not None and sessions.is_paid(wallet)
-
-    if tx_hash is not None and not is_paid:
-        try:
-            verify_payment(chain_client, settings, tx_hash, prompt)
-        except PaymentVerificationError as exc:
-            terms = build_challenge(settings, prompt)
-            return JSONResponse(status_code=402, content={**terms.model_dump(), "error": str(exc)})
-        if wallet is not None:
-            sessions.mark_paid(wallet)
-        is_paid = True
-
-    if not is_paid and len(prompt) >= settings.free_input_char_cap:
-        terms = build_challenge(settings, prompt)
-        return JSONResponse(status_code=402, content=terms.model_dump())
+    # Chat unlocks go through /unlock/chat like every other tile — /ask never
+    # verifies a payment itself, it only checks whether this wallet is already
+    # unlocked. The frontend's own daily counter decides what to show the
+    # user before ever calling this; the server's is_paid check is what
+    # actually decides full vs brief.
+    is_paid = wallet is not None and store.is_unlocked(wallet, "chat")
 
     try:
         answer = ask_llm(settings, prompt, full=is_paid)

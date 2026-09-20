@@ -1,11 +1,13 @@
-import { usePrivy } from "@privy-io/react-auth";
+import { usePrivy, useWallets } from "@privy-io/react-auth";
 
 function truncate(address: string): string {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
 
-export function WalletConnectButton({ walletAddress }: { walletAddress?: string }) {
+export function WalletConnectButton() {
   const { login, authenticated } = usePrivy();
+  const { wallets } = useWallets();
+  const walletAddress = wallets[0]?.address;
 
   if (authenticated && walletAddress) {
     return (
