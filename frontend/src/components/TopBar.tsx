@@ -6,24 +6,20 @@ import { WalletConnectButton } from "./WalletConnectButton";
 export function TopBar({
   theme,
   onToggleTheme,
-  walletAddress,
 }: {
   theme: Theme;
   onToggleTheme: () => void;
-  walletAddress?: string;
 }) {
   return (
     <div className="topbar">
       <div className="container topbar__inner">
         <div className="topbar__left">
           <Link to="/" className="topbar__wordmark">
-            Block-x-Aid<sup>®</sup>
+            Arc-402
           </Link>
-          <span className="topbar__divider" />
-          <span className="topbar__demo-tag">Arc Ask — live demo</span>
         </div>
         <div className="topbar__right">
-          <WalletConnectButton walletAddress={walletAddress} />
+          <WalletConnectButton />
           <ThemeToggle theme={theme} onToggle={onToggleTheme} />
         </div>
       </div>

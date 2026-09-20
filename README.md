@@ -1,9 +1,11 @@
-# Arc LLM Paywall
+# Arc-402
 
-A pay-per-call AI endpoint on [Arc mainnet](https://arc.io), gated by an x402-shaped
-USDC payment. A person opens the demo page, asks a question, gets a `402 Payment
-Required` challenge, pays a few cents in USDC through an embedded Privy wallet, and
-gets back a real OpenAI response — with the payment settled and verifiable on the
+The Payable Internet — any API, file, or computation gated behind one payment
+primitive, paid in USDC and settled instantly on [Arc](https://arc.io). A grid of
+small tiles (chat, OCR, QR generation, IBAN validation) all run through the exact
+same `PaymentVerifier` contract and x402-shaped middleware: click a tile, hit a
+`402 Payment Required`, pay a few cents through an embedded Privy wallet, get the
+result — with the payment settled and verifiable on the
 [Arc Explorer](https://explorer.arc.io).
 
 Built for the [Arc Microgrants](https://community.arc.io/public/events/arc-microgrants-f8tijfjhyq) program.
@@ -20,33 +22,40 @@ Built for the [Arc Microgrants](https://community.arc.io/public/events/arc-micro
 
 ## What it uses Arc for
 
-Every LLM call is metered by an onchain USDC payment settled on Arc. The
-`PaymentVerifier` contract is the settlement rail: it pulls USDC from the payer to
-the resource owner and emits a `PaymentSettled` event tagged with a request hash.
-The middleware reads that event straight off Arc's RPC to decide whether to serve
-the request — payment becomes a transport-layer concern instead of a separate
-billing system, which is the whole point of x402.
+Every tile unlock is metered by an onchain USDC payment settled on Arc. The
+`PaymentVerifier` contract is a single, resource-agnostic settlement rail: it
+pulls USDC from the payer to a resource owner and emits a `PaymentSettled` event
+tagged with a request hash scoped to `(resource, tile, wallet, payload)`. The
+middleware reads that event straight off Arc's RPC to decide whether to unlock a
+given tile for a given wallet — payment becomes a transport-layer concern instead
+of a separate billing system per resource, which is the whole point of x402, and
+the whole point of routing every tile through the same contract instead of one
+contract per capability.
 
 ## Architecture
 
 ```
-User (browser, Privy wallet)
-  -> GET /ask                      [middleware]
-  <- 402 + payment terms
+User clicks a tile (browser, Privy wallet)
+  -> GET /unlock/:tileId           [middleware]
+  <- 402 + payment terms (tile-specific price)
   -> pay() on PaymentVerifier       [Arc mainnet]
   <- PaymentSettled event
-  -> GET /ask?tx_hash=...          [middleware]
-  -> verify event via Arc RPC
-  -> call OpenAI
-  <- 200 + response
+  -> GET /unlock/:tileId?tx_hash=  [middleware]
+  -> verify event via Arc RPC, mark (wallet, tileId) unlocked in Redis
+  <- {"unlocked": true}
+  -> tile runs: backend call (chat) or in-browser (OCR/QR/IBAN)
 ```
+
+Unlock state is TTL'd in Redis, keyed by `(wallet, tile)` — one payment unlocks a
+tile for every call that wallet makes until the TTL expires, not just the call
+that paid, and survives a middleware redeploy (an in-memory store would not).
 
 ## Repo layout
 
 ```
 contracts/    Foundry project — PaymentVerifier.sol + tests + deploy script
-middleware/   FastAPI service — x402 handshake, Arc RPC verification, OpenAI call
-frontend/     React + Vite + Privy — the live demo page
+middleware/   FastAPI service — generic /unlock/:tileId + /ask, Arc RPC verification, OpenAI call
+frontend/     React + Vite + Privy — landing page + the /product tile grid
 ```
 
 ## Running locally
@@ -63,9 +72,13 @@ cd middleware
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 cp .env.example .env   # fill in ARC_RPC_URL, CONTRACT_ADDRESS, OPENAI_API_KEY, etc.
+redis-server &          # or point REDIS_URL in .env at any reachable Redis
 pytest
 uvicorn app.main:app --reload
 ```
+
+Tile-unlock tests use an in-memory fake and never touch Redis; only the running
+server needs a real `REDIS_URL`.
 
 **Frontend**
 ```
@@ -117,9 +130,18 @@ cp .env.example .env
 # ARC_RPC=https://rpc.mainnet.arc.io
 # PRIVATE_KEY=<deployer wallet private key — never commit>
 # USDC_ADDRESS=0x3600000000000000000000000000000000000000
-# MIN_PRICE=10000   # 0.01 USDC per call, in 6-decimal base units
+# MIN_PRICE=1000   # 0.001 USDC, the cheapest tile's price — see middleware/app/tiles.py
 
 forge script script/Deploy.s.sol --rpc-url $ARC_RPC --broadcast
+```
+
+Per-tile pricing itself lives in [`middleware/app/tiles.py`](middleware/app/tiles.py),
+not `contracts/.env` — `MIN_PRICE` only sets the contract's on-chain floor, which
+must be at or below the cheapest tile's price or that tile's payments revert with
+`Underpayment`. If a new tile is added below the current floor, lower it again
+with the contract's owner-only `setMinPrice()` — no redeploy needed:
+```
+cast send <CONTRACT_ADDRESS> "setMinPrice(uint256)" <new floor> --rpc-url $ARC_RPC --private-key $PRIVATE_KEY
 ```
 
 This prints the deployed `PaymentVerifier` address. Arc's docs don't currently
@@ -137,17 +159,20 @@ is the Arc Explorer link for the submission.
 
 ## Deploying to Render
 
-[`render.yaml`](render.yaml) at the repo root is a Render Blueprint — two
+[`render.yaml`](render.yaml) at the repo root is a Render Blueprint — three
 services, no manual dashboard setup beyond secrets:
 
+- **`arc402-redis`** — Render's managed Key Value (Redis-compatible) store
+  backing tile-unlock state.
 - **`blockaid-middleware`** — the FastAPI app, built from
-  [`middleware/Dockerfile`](middleware/Dockerfile).
+  [`middleware/Dockerfile`](middleware/Dockerfile). Gets `REDIS_URL` injected
+  automatically via `fromService` — no manual wiring needed for that one var.
 - **`blockaid-frontend`** — the React app, built as a static site from `frontend/`.
 
 Steps:
 
 1. Push this repo to GitHub, then in the Render dashboard: **New → Blueprint**,
-   point it at the repo. Render reads `render.yaml` and creates both services.
+   point it at the repo. Render reads `render.yaml` and creates all three services.
 2. Render will pause on the `sync: false` env vars and ask you to fill them in —
    `CONTRACT_ADDRESS`, `RESOURCE_ADDRESS`, `OPENAI_API_KEY`, `VITE_PRIVY_APP_ID`,
    `VITE_CONTRACT_ADDRESS`. These are marked `sync: false` because they're
@@ -160,26 +185,28 @@ Steps:
 4. The middleware's `Dockerfile` binds to Render's `$PORT` automatically — no
    changes needed there.
 
-## Should the paid tier have a database for conversation memory?
+## Does the paid tier need a database for conversation memory?
 
-Not yet, and probably not at all for this. Right now every `/ask` call is a
-single-turn request with no history — that's intentional per the build plan
-("Memory" was explicitly descoped as a stretch goal, since the character-cap
-mechanism alone makes free-vs-paid obvious without it). If you want the paid
-tier to feel conversational, the lower-risk path is to have the **frontend**
-replay the visible message history in each request body (it already holds
-`messages` in `useChatSession` state) rather than standing up a database —
-stateless on the server, and Render's free-tier containers can restart/sleep
-at any time anyway, so anything server-held in memory (like the current
-`PaidSessionStore`) isn't durable regardless. A database earns its complexity
-only if you want memory to survive a page reload or follow a wallet across
+Not for what's built — that question is answered differently than it used to be.
+Tile-unlock state (which wallet paid for which tile, and until when) now lives in
+Redis, not a database — a natural fit, since it's all short-lived TTL'd state, and
+it also fixes the reliability gap an in-memory store had (a redeploy used to wipe
+every unlock and force re-payment; Redis survives that). Conversation *history* is
+still out of scope on purpose — every `/ask` call is single-turn with no memory,
+per the build plan's explicit descoping of "Memory" as a stretch goal. If chat
+should feel conversational later, the lower-risk path is still to have the
+**frontend** replay its already-held `messages` state in each request rather than
+adding a second storage layer for it — a real database only earns its complexity
+if memory needs to survive a page reload or follow a wallet across
 devices — worth flagging as a real v2 step, not a gap in what's shipped now.
 
 ## What's out of scope (v1)
 
-- No token-based metering — flat USDC price per call.
+- No token-based metering — flat USDC price per tile.
 - No oracle-based dispute resolution.
-- Single protected resource/endpoint only.
-- No production-grade rate limiting beyond a simple call cap.
+- No conversation memory (single-turn chat only, by design — see above).
+- No production-grade rate limiting beyond the 3-free-uses-per-day client counter.
+- The fifth "Agent Resource" tile (an autonomous agent paying for itself via a
+  dedicated wallet) is a planned follow-up, not implemented here.
 
 These are the natural v2 steps if this goes further than a microgrant prototype.

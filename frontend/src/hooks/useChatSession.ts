@@ -1,6 +1,7 @@
-import { useState } from "react";
-import { fetchAsk, type PaymentTerms, type Tier } from "../api";
-import { usePayment } from "./usePayment";
+import { useEffect, useState } from "react";
+import { fetchAsk, type Tier } from "../api";
+import { useFreeUsage } from "./useFreeUsage";
+import { useTileUnlock } from "./useTileUnlock";
 
 export interface ChatMessage {
   id: string;
@@ -10,10 +11,7 @@ export interface ChatMessage {
 
 export type SessionStatus = "idle" | "thinking" | "paying" | "verifying" | "error";
 
-interface PendingPaywall {
-  prompt: string;
-  terms: PaymentTerms;
-}
+const DOWNGRADE_SEEN_KEY = "arc402:chat-downgrade-seen";
 
 let nextId = 0;
 function makeId(): string {
@@ -22,52 +20,48 @@ function makeId(): string {
 }
 
 export function useChatSession() {
-  const { walletAddress, payTerms } = usePayment();
+  const freeUsage = useFreeUsage("chat", 3);
+  const unlock = useTileUnlock("chat");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [tier, setTier] = useState<Tier>("free");
   const [status, setStatus] = useState<SessionStatus>("idle");
-  const [pendingPaywall, setPendingPaywall] = useState<PendingPaywall | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showDowngradeModal, setShowDowngradeModal] = useState(false);
+  const [downgradeSeen, setDowngradeSeen] = useState(
+    () => localStorage.getItem(DOWNGRADE_SEEN_KEY) === "true",
+  );
+
+  useEffect(() => {
+    if (unlock.walletAddress) {
+      unlock.checkUnlocked();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unlock.walletAddress]);
+
+  const tier: Tier = unlock.isUnlocked ? "paid" : "free";
 
   async function sendMessage(prompt: string) {
     if (!prompt.trim()) return;
     setError(null);
+
+    const isPaid = unlock.isUnlocked;
+    const wasExhausted = !isPaid && freeUsage.isExhausted;
+    const quality = isPaid || !wasExhausted ? "full" : "brief";
+
     setMessages((m) => [...m, { id: makeId(), role: "user", content: prompt }]);
     setStatus("thinking");
 
     try {
-      const result = await fetchAsk(prompt, { wallet: walletAddress });
-      if (result.ok) {
-        setTier(result.tier);
-        setMessages((m) => [...m, { id: makeId(), role: "assistant", content: result.response }]);
-        setStatus("idle");
-      } else {
-        setPendingPaywall({ prompt, terms: result.terms });
-        setStatus("idle");
-      }
-    } catch (err) {
-      setError((err as Error).message);
-      setStatus("error");
-    }
-  }
+      const result = await fetchAsk(prompt, { wallet: unlock.walletAddress, quality });
+      setMessages((m) => [...m, { id: makeId(), role: "assistant", content: result.response }]);
+      setStatus("idle");
 
-  async function unlockAndRetry() {
-    if (!pendingPaywall) return;
-    setStatus("paying");
-
-    try {
-      const txHash = await payTerms(pendingPaywall.terms);
-      setStatus("verifying");
-
-      const result = await fetchAsk(pendingPaywall.prompt, { wallet: walletAddress, txHash });
-      if (result.ok) {
-        setTier(result.tier);
-        setMessages((m) => [...m, { id: makeId(), role: "assistant", content: result.response }]);
-        setPendingPaywall(null);
-        setStatus("idle");
-      } else {
-        setError("payment verification failed");
-        setStatus("error");
+      if (!isPaid) {
+        freeUsage.recordUse();
+        if (wasExhausted && !downgradeSeen) {
+          localStorage.setItem(DOWNGRADE_SEEN_KEY, "true");
+          setDowngradeSeen(true);
+          setShowDowngradeModal(true);
+        }
       }
     } catch (err) {
       setError((err as Error).message);
@@ -84,11 +78,13 @@ export function useChatSession() {
     messages,
     tier,
     status,
-    pendingPaywall,
     error,
-    walletAddress,
+    freeRemaining: freeUsage.remaining,
+    downgradeSeen,
+    showDowngradeModal,
+    dismissDowngradeModal: () => setShowDowngradeModal(false),
+    unlock,
     sendMessage,
-    unlockAndRetry,
     dismissError,
   };
 }

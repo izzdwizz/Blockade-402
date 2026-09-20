@@ -4,21 +4,22 @@ from app.config import Settings
 from app.llm import ask_llm
 
 
-def make_settings() -> Settings:
-    return Settings(
+def make_settings(**overrides) -> Settings:
+    defaults = dict(
         arc_rpc_url="http://localhost:8545",
         contract_address="0x0000000000000000000000000000000000dEaD",
         openai_api_key="sk-test",
         llm_base_url="",
         llm_model="gpt-4o-mini",
         resource_address="0x00000000000000000000000000000000001234",
-        price_usdc=5_000,
         chain_id=999,
-        free_input_char_cap=200,
         free_max_tokens=60,
         paid_session_ttl_seconds=3600,
         cors_origins=["http://localhost:5173"],
+        redis_url="redis://localhost:6379/0",
     )
+    defaults.update(overrides)
+    return Settings(**defaults)
 
 
 def make_mock_client(content: str) -> MagicMock:
@@ -52,19 +53,8 @@ def test_free_tier_caps_response_length_and_adds_system_prompt():
 
 
 def test_uses_configured_model_and_base_url():
-    settings = Settings(
-        arc_rpc_url="http://localhost:8545",
-        contract_address="0x0000000000000000000000000000000000dEaD",
-        openai_api_key="sk-test",
-        llm_base_url="https://api.groq.com/openai/v1",
-        llm_model="openai/gpt-oss-20b",
-        resource_address="0x00000000000000000000000000000000001234",
-        price_usdc=5_000,
-        chain_id=999,
-        free_input_char_cap=200,
-        free_max_tokens=60,
-        paid_session_ttl_seconds=3600,
-        cors_origins=["http://localhost:5173"],
+    settings = make_settings(
+        llm_base_url="https://api.groq.com/openai/v1", llm_model="openai/gpt-oss-20b"
     )
     mock_client = make_mock_client("hi")
 
@@ -77,19 +67,10 @@ def test_uses_configured_model_and_base_url():
 
 
 def test_gpt_oss_models_get_low_reasoning_effort():
-    settings = Settings(
-        arc_rpc_url="http://localhost:8545",
-        contract_address="0x0000000000000000000000000000000000dEaD",
-        openai_api_key="sk-test",
+    settings = make_settings(
         llm_base_url="https://api.groq.com/openai/v1",
         llm_model="openai/gpt-oss-20b",
-        resource_address="0x00000000000000000000000000000000001234",
-        price_usdc=5_000,
-        chain_id=999,
-        free_input_char_cap=200,
         free_max_tokens=150,
-        paid_session_ttl_seconds=3600,
-        cors_origins=["http://localhost:5173"],
     )
     mock_client = make_mock_client("hi")
 

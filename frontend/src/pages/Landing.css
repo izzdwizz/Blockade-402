@@ -15,6 +15,12 @@
   padding: 18px 0;
 }
 
+.landing__nav-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
 .landing__wordmark {
   font-size: 20px;
   font-weight: 700;
@@ -317,7 +323,7 @@
 /* Architecture flow steps */
 .flow-steps {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 1px;
   background: var(--border-soft);
   border: 1px solid var(--border-soft);

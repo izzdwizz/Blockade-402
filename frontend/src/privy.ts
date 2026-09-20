@@ -24,6 +24,9 @@ export const arcChain = {
 };
 
 export const privyConfig: PrivyClientConfig = {
+  // "loginMethods" only *displays a subset* of what's enabled in the Privy
+  // dashboard — email login must also be turned on there, not just here.
+  loginMethods: ["email", "wallet"],
   embeddedWallets: {
     ethereum: {
       createOnLogin: "users-without-wallets",

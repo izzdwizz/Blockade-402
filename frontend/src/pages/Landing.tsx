@@ -1,36 +1,41 @@
 import { Link } from "react-router-dom";
 import "./Landing.css";
 import { ThemeToggle } from "../components/ThemeToggle";
+import { TileCard } from "../components/TileCard";
 import { useTheme } from "../hooks/useTheme";
+import { TILES } from "../tiles";
 
-const FLOW_STEPS = [
+const STEPS = [
   {
-    title: "Request hits the resource",
-    body: "A client calls the protected endpoint. No API key, no subscription — just a request.",
+    title: "Pick a capability",
+    body: "Chat, OCR, a QR code, an IBAN check — one grid, one payment rail underneath all of it.",
   },
   {
-    title: "402 Payment Required",
-    body: "The middleware answers with machine-readable terms: amount, recipient, chain, a hash tying the payment to this exact request.",
+    title: "Hit a 402",
+    body: "The exact price for that one thing, shown upfront, tied to a request hash that's yours alone.",
   },
   {
-    title: "Settled on Arc",
-    body: "The client pays the PaymentVerifier contract in USDC. Arc's sub-second finality means the payment is final almost immediately.",
-  },
-  {
-    title: "Verified & served",
-    body: "The middleware reads the PaymentSettled event straight off Arc's RPC, confirms it matches, and serves the resource.",
+    title: "Pay in USDC on Arc",
+    body: "Unlocked instantly, at Arc's sub-second settlement — no account, no subscription.",
   },
 ];
 
 const COMPARISON = [
   {
-    label: "Question length",
-    free: "Capped (≈200 characters)",
-    paid: "Unlimited",
+    label: "Chat",
+    free: "Capped questions, short answers",
+    paid: "Unlimited length",
   },
-  { label: "Answer length", free: "Short", paid: "Full" },
-  { label: "Speed", free: "Standard", paid: "Arc's sub-second settlement" },
-  { label: "Cost", free: "$0", paid: "A few cents in USDC per unlock" },
+  {
+    label: "OCR / QR / IBAN",
+    free: "3 free uses per day",
+    paid: "Unlimited uses",
+  },
+  {
+    label: "Cost",
+    free: "$0",
+    paid: "A fraction of a cent to a few cents in USDC",
+  },
 ];
 
 export function Landing() {
@@ -38,19 +43,17 @@ export function Landing() {
 
   return (
     <div className="landing">
-      <nav className="landing__nav py-4">
+      <nav className="landing__nav py-5">
         <div className="container landing__nav-inner">
-          <span className="landing__wordmark">
-            Block-x-Aid<sup>®</sup>
-          </span>
+          <span className="landing__wordmark">Arc-402</span>
           <div className="landing__nav-links">
             <a href="#how-it-works">How it works</a>
-            <a href="#demo">Live demo</a>
+            <a href="#tiles">The tiles</a>
             <a href="https://github.com" target="_blank" rel="noreferrer">
               Repo
             </a>
           </div>
-          <div className="flex gap-4 ">
+          <div className="landing__nav-right">
             <ThemeToggle theme={theme} onToggle={toggleTheme} />
             <a
               href="https://github.com"
@@ -65,27 +68,26 @@ export function Landing() {
         </div>
       </nav>
 
-      <header className="container hero">
+      <header className="container hero !py-14">
         <div className="fade-in">
-          {/* <p className="eyebrow hero__eyebrow">
+          <p className="eyebrow hero__eyebrow">
             Payment infrastructure · Built on Arc
-          </p> */}
-          <h1 className="hero__headline pt-20">
-            Gate anything.
+          </p>
+          <h1 className="hero__headline">
+            A Payable
             <br />
-            Settle instantly.
+            Internet.
           </h1>
-          <p className="hero__subhead !text-base">
-            BlockAid is an x402 paywall architecture — a settlement contract, a
-            verifying middleware, and a wallet prompt — that turns any endpoint
-            into a pay-per-call resource, billed in USDC on Arc.
+          <p className="hero__subhead">
+            Any API, file, or computation — gated behind one payment primitive,
+            paid in USDC, settled instantly on Arc.
           </p>
           <div className="hero__ctas">
             <Link to="/product" className="pill-button">
-              See the live demo →
+              Try it free →
             </Link>
-            <a href="#how-it-works" className="text-link mt-1">
-              View the working principle
+            <a href="#how-it-works" className="text-link">
+              See how it works
             </a>
           </div>
         </div>
@@ -96,7 +98,7 @@ export function Landing() {
           <div className="demo-card__flow">
             <div className="demo-card__step">
               <span className="demo-card__step-dot" />
-              GET /resource
+              GET /unlock/:tileId
             </div>
             <div className="demo-card__step">
               <span className="demo-card__step-dot" />
@@ -114,7 +116,7 @@ export function Landing() {
             </div>
             <div className="demo-card__meta">
               <span>USDC · 6 decimals</span>
-              <span className="demo-card__price">$0.005 / call</span>
+              <span className="demo-card__price">One contract, every tile</span>
             </div>
           </div>
         </div>
@@ -126,14 +128,12 @@ export function Landing() {
           <div className="stats__label">Arc settlement finality</div>
         </div>
         <div className="stats__item">
-          <div className="stats__number">3</div>
-          <div className="stats__label">
-            Moving parts — contract, middleware, wallet
-          </div>
+          <div className="stats__number">4</div>
+          <div className="stats__label">Resources, one payment primitive</div>
         </div>
         <div className="stats__item">
-          <div className="stats__number">$0.005</div>
-          <div className="stats__label">Minimum viable micropayment</div>
+          <div className="stats__number">$0.001</div>
+          <div className="stats__label">Cheapest unlock on the grid</div>
         </div>
         <div className="stats__item">
           <p className="stats__note">
@@ -143,16 +143,16 @@ export function Landing() {
         </div>
       </section>
 
-      <section id="how-it-works" className="container section !py-10">
-        <p className="eyebrow section__eyebrow">Architecture</p>
-        <h2 className="section__title">Four steps, no custody.</h2>
+      <section id="how-it-works" className="container section !py-14">
+        <p className="eyebrow section__eyebrow">How it works</p>
+        <h2 className="section__title">Three steps, no signup.</h2>
         <p className="section__subtitle">
-          PaymentVerifier never holds a balance — it's a thin, auditable
-          settlement rail that pulls USDC straight from payer to resource owner
-          and emits proof.
+          Every tile below runs through the exact same settlement contract —
+          this isn't five separate apps, it's one payment rail wired to
+          different things you might want.
         </p>
         <div className="flow-steps">
-          {FLOW_STEPS.map((step, i) => (
+          {STEPS.map((step, i) => (
             <div className="flow-step" key={step.title}>
               <div className="flow-step__index">
                 {String(i + 1).padStart(2, "0")}
@@ -164,21 +164,34 @@ export function Landing() {
         </div>
       </section>
 
-      <section id="demo" className="container section">
-        <div className="demo-callout py-8">
+      <section id="tiles" className="container section !py-14">
+        <p className="eyebrow section__eyebrow">The vending machine</p>
+        <h2 className="section__title">One primitive, many resources.</h2>
+        <p className="section__subtitle">
+          Click a tile, hit a 402, pay, get the result — the same rail under
+          every one of these.
+        </p>
+        <div className="tile-grid tile-grid--compact">
+          {TILES.map((tile) => (
+            <TileCard key={tile.id} tile={tile} compact />
+          ))}
+        </div>
+      </section>
+
+      <section className="container section !py-10">
+        <div className="demo-callout">
           <div>
-            <p className="eyebrow section__eyebrow">See it live</p>
+            <p className="eyebrow section__eyebrow">Free vs. paid</p>
             <h2 className="demo-callout__title">
-              Arc Ask — a paywalled AI endpoint built on BlockAid.
+              The contrast is felt, not described.
             </h2>
             <p className="demo-callout__body">
-              To show the architecture actually working, we built Arc Ask: a
-              free tier that's genuinely restricted, and a single USDC payment
-              that unlocks the full experience — instantly, at Arc's settlement
+              A few free uses of anything, no wallet required. Connect and pay a
+              few cents to remove the limit — instantly, at Arc's settlement
               speed.
             </p>
             <Link to="/product" className="pill-button">
-              Try Arc Ask →
+              Try the grid →
             </Link>
           </div>
           <div className="compare">
@@ -207,15 +220,15 @@ export function Landing() {
       <div className="container">
         <div className="trust">
           <span>
-            Powered by <strong>OpenAI</strong> · Wallets by{" "}
-            <strong>Privy</strong> · Settled on <strong>Arc</strong>
+            Settled on <strong>Arc</strong> · Wallets by <strong>Privy</strong>{" "}
+            · Open source
           </span>
         </div>
       </div>
 
-      <footer className="container footer !py-3 !text-xs">
+      <footer className="container footer !py-3">
         <span className="footer__copy">
-          © {new Date().getFullYear()} BlockAid
+          © {new Date().getFullYear()} Arc-402
         </span>
         <div className="footer__links">
           <a href="https://github.com" target="_blank" rel="noreferrer">
