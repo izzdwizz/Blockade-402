@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { BackToGrid } from "../BackToGrid";
 import { ConnectAccountModal } from "../ConnectAccountModal";
 import { useTileGate } from "../../hooks/useTileGate";
 import { checkIban, type IbanCheckResult } from "../../utils/validateIban";
@@ -18,6 +19,7 @@ export function IbanTool() {
 
   return (
     <div className="tool-panel">
+      <BackToGrid />
       <div className="tool-panel__header">
         <h1 className="tool-panel__title">{tile.name}</h1>
         {!unlock.isUnlocked && (

@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import "./Landing.css";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { TileCard } from "../components/TileCard";
+import { Wordmark } from "../components/Wordmark";
 import { useTheme } from "../hooks/useTheme";
 import { TILES } from "../tiles";
 
@@ -45,7 +46,7 @@ export function Landing() {
     <div className="landing">
       <nav className="landing__nav py-5">
         <div className="container landing__nav-inner">
-          <span className="landing__wordmark">Arc-402</span>
+          <Wordmark className="landing__wordmark" />
           <div className="landing__nav-links">
             <a href="#how-it-works">How it works</a>
             <a href="#tiles">The tiles</a>

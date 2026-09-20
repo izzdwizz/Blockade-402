@@ -1,7 +1,7 @@
-import { Link } from "react-router-dom";
 import type { Theme } from "../hooks/useTheme";
 import { ThemeToggle } from "./ThemeToggle";
 import { WalletConnectButton } from "./WalletConnectButton";
+import { Wordmark } from "./Wordmark";
 
 export function TopBar({
   theme,
@@ -11,12 +11,10 @@ export function TopBar({
   onToggleTheme: () => void;
 }) {
   return (
-    <div className="topbar">
+    <div className={`topbar ${theme == "light" ? "!bg-white" : ""}`}>
       <div className="container topbar__inner">
         <div className="topbar__left">
-          <Link to="/" className="topbar__wordmark">
-            Arc-402
-          </Link>
+          <Wordmark className="topbar__wordmark" />
         </div>
         <div className="topbar__right">
           <WalletConnectButton />

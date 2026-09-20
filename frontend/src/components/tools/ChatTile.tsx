@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { BackToGrid } from "../BackToGrid";
 import { ChatInput } from "../ChatInput";
 import { ChatThread } from "../ChatThread";
 import { ConnectAccountModal } from "../ConnectAccountModal";
@@ -43,6 +44,9 @@ export function ChatTile() {
 
   return (
     <>
+      <div className="container" style={{ maxWidth: 720, paddingTop: 20 }}>
+        <BackToGrid />
+      </div>
       <div className="chat-panel">
         {messages.length === 0 ? (
           <div className="chat-panel__empty">

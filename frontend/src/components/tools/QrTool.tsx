@@ -1,5 +1,6 @@
 import { useState } from "react";
 import QRCode from "qrcode";
+import { BackToGrid } from "../BackToGrid";
 import { ConnectAccountModal } from "../ConnectAccountModal";
 import { useTileGate } from "../../hooks/useTileGate";
 import { getTile } from "../../tiles";
@@ -25,6 +26,7 @@ export function QrTool() {
 
   return (
     <div className="tool-panel">
+      <BackToGrid />
       <div className="tool-panel__header">
         <h1 className="tool-panel__title">{tile.name}</h1>
         {!unlock.isUnlocked && (
