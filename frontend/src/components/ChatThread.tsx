@@ -1,9 +1,17 @@
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { ChatMessage, SessionStatus } from "../hooks/useChatSession";
 
 function MessageBubble({ message }: { message: ChatMessage }) {
-  return (
-    <div className={`message-bubble message-bubble--${message.role}`}>{message.content}</div>
-  );
+  if (message.role === "assistant") {
+    return (
+      <div className="message-bubble message-bubble--assistant markdown-body">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+      </div>
+    );
+  }
+
+  return <div className="message-bubble message-bubble--user">{message.content}</div>;
 }
 
 export function ChatThread({
