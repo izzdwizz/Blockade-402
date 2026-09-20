@@ -1,5 +1,7 @@
 import { Link } from "react-router-dom";
 import "./Landing.css";
+import { ThemeToggle } from "../components/ThemeToggle";
+import { useTheme } from "../hooks/useTheme";
 
 const FLOW_STEPS = [
   {
@@ -32,6 +34,8 @@ const COMPARISON = [
 ];
 
 export function Landing() {
+  const { theme, toggleTheme } = useTheme();
+
   return (
     <div className="landing">
       <nav className="landing__nav py-4">
@@ -46,15 +50,18 @@ export function Landing() {
               Repo
             </a>
           </div>
-          <a
-            href="https://github.com"
-            target="_blank"
-            rel="noreferrer"
-            className="nav-cta"
-          >
-            <span className="nav-cta__dot" />
-            View source
-          </a>
+          <div className="flex gap-4 ">
+            <ThemeToggle theme={theme} onToggle={toggleTheme} />
+            <a
+              href="https://github.com"
+              target="_blank"
+              rel="noreferrer"
+              className="nav-cta"
+            >
+              <span className="nav-cta__dot" />
+              View source
+            </a>
+          </div>
         </div>
       </nav>
 

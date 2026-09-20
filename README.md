@@ -94,6 +94,21 @@ of demo calls with margin). Since native gas and the ERC-20 balance are the same
 underlying USDC, funding the address once covers both gas and any `pay()` calls it
 makes directly.
 
+### Testnet first
+
+Test the full pay flow with test tokens before risking real USDC. Arc testnet:
+chain ID `5042002`, RPC `https://rpc.testnet.arc.io`, explorer
+`https://explorer.testnet.arc.io`. The USDC ERC-20 interface address
+(`0x3600...0000`) is identical on both networks. Get testnet USDC for your
+deployer wallet from [faucet.circle.com](https://faucet.circle.com), then deploy
+with `ARC_RPC=https://rpc.testnet.arc.io` in `contracts/.env`.
+
+**`contracts/.env`, `middleware/.env`, and `frontend/.env` must all point at the
+same network at the same time** — chain ID, RPC URL, and contract address need to
+agree across all three, or payments will verify against the wrong chain and
+silently fail (or throw an ENS-resolution error in the frontend if the contract
+address is left blank).
+
 ### Mainnet cutover
 
 ```
@@ -119,6 +134,46 @@ Point `middleware/.env` (`CONTRACT_ADDRESS`, `ARC_RPC_URL=https://rpc.mainnet.ar
 at the deployed contract, redeploy both services, and run the full flow once against
 mainnet before recording the demo. The transaction hash from that live `pay()` call
 is the Arc Explorer link for the submission.
+
+## Deploying to Render
+
+[`render.yaml`](render.yaml) at the repo root is a Render Blueprint — two
+services, no manual dashboard setup beyond secrets:
+
+- **`blockaid-middleware`** — the FastAPI app, built from
+  [`middleware/Dockerfile`](middleware/Dockerfile).
+- **`blockaid-frontend`** — the React app, built as a static site from `frontend/`.
+
+Steps:
+
+1. Push this repo to GitHub, then in the Render dashboard: **New → Blueprint**,
+   point it at the repo. Render reads `render.yaml` and creates both services.
+2. Render will pause on the `sync: false` env vars and ask you to fill them in —
+   `CONTRACT_ADDRESS`, `RESOURCE_ADDRESS`, `OPENAI_API_KEY`, `VITE_PRIVY_APP_ID`,
+   `VITE_CONTRACT_ADDRESS`. These are marked `sync: false` because they're
+   secrets or deployment-specific values that shouldn't live in the repo.
+3. `VITE_API_BASE_URL` (frontend) and `CORS_ORIGINS` (middleware) reference each
+   other's URLs — Render assigns those URLs on first deploy, so there's a
+   chicken-and-egg step: deploy once, copy each service's `*.onrender.com` URL
+   from the dashboard, paste them into the other service's env var, and Render
+   redeploys automatically on env var change.
+4. The middleware's `Dockerfile` binds to Render's `$PORT` automatically — no
+   changes needed there.
+
+## Should the paid tier have a database for conversation memory?
+
+Not yet, and probably not at all for this. Right now every `/ask` call is a
+single-turn request with no history — that's intentional per the build plan
+("Memory" was explicitly descoped as a stretch goal, since the character-cap
+mechanism alone makes free-vs-paid obvious without it). If you want the paid
+tier to feel conversational, the lower-risk path is to have the **frontend**
+replay the visible message history in each request body (it already holds
+`messages` in `useChatSession` state) rather than standing up a database —
+stateless on the server, and Render's free-tier containers can restart/sleep
+at any time anyway, so anything server-held in memory (like the current
+`PaidSessionStore`) isn't durable regardless. A database earns its complexity
+only if you want memory to survive a page reload or follow a wallet across
+devices — worth flagging as a real v2 step, not a gap in what's shipped now.
 
 ## What's out of scope (v1)
 

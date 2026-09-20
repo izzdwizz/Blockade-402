@@ -1,0 +1,56 @@
+services:
+  # FastAPI x402 middleware — verifies payments against Arc and gates the LLM call.
+  - type: web
+    name: blockaid-middleware
+    env: docker
+    plan: free
+    dockerfilePath: ./middleware/Dockerfile
+    dockerContext: ./middleware
+    envVars:
+      - key: ARC_RPC_URL
+        value: https://rpc.mainnet.arc.io
+      - key: ARC_CHAIN_ID
+        value: "5042"
+      - key: CONTRACT_ADDRESS
+        sync: false # deployed PaymentVerifier address — fill in after `forge script` deploy
+      - key: RESOURCE_ADDRESS
+        sync: false # wallet that receives paid-tier USDC
+      - key: PRICE_USDC
+        value: "5000" # 0.005 USDC, 6-decimal base units
+      - key: OPENAI_API_KEY
+        sync: false # your Groq (or OpenAI) key
+      - key: LLM_BASE_URL
+        value: https://api.groq.com/openai/v1 # blank this out to use OpenAI directly instead
+      - key: LLM_MODEL
+        value: openai/gpt-oss-20b
+      - key: FREE_INPUT_CHAR_CAP
+        value: "200"
+      - key: FREE_MAX_TOKENS
+        value: "150"
+      - key: PAID_SESSION_TTL_SECONDS
+        value: "3600"
+      - key: CORS_ORIGINS
+        sync: false # set to the frontend's Render URL once it's deployed, e.g. https://blockaid-frontend.onrender.com
+
+  # React + Vite static frontend — landing page + the Arc Ask demo at /product.
+  - type: web
+    name: blockaid-frontend
+    env: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_PRIVY_APP_ID
+        sync: false
+      - key: VITE_API_BASE_URL
+        sync: false # set to the middleware service's Render URL, e.g. https://blockaid-middleware.onrender.com
+      - key: VITE_CONTRACT_ADDRESS
+        sync: false # same deployed PaymentVerifier address as CONTRACT_ADDRESS above
+      - key: VITE_ARC_CHAIN_ID
+        value: "5042"
+      - key: VITE_ARC_RPC_URL
+        value: https://rpc.mainnet.arc.io
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
