@@ -17,6 +17,8 @@ def make_settings(**overrides) -> Settings:
         paid_session_ttl_seconds=3600,
         cors_origins=["http://localhost:5173"],
         redis_url="redis://localhost:6379/0",
+        privy_app_id="",
+        privy_verification_key="",
     )
     defaults.update(overrides)
     return Settings(**defaults)
@@ -89,6 +91,27 @@ def test_non_gpt_oss_models_get_no_reasoning_effort_param():
 
     _, kwargs = mock_client.chat.completions.create.call_args
     assert "reasoning_effort" not in kwargs
+
+
+def test_memory_context_is_prepended_as_a_system_message():
+    mock_client = make_mock_client("hi")
+
+    with patch("app.llm.get_openai_client", return_value=mock_client):
+        ask_llm(make_settings(), "say hi", full=True, memory_context="the user's name is Ada")
+
+    _, kwargs = mock_client.chat.completions.create.call_args
+    assert kwargs["messages"][0] == {"role": "system", "content": "the user's name is Ada"}
+    assert kwargs["messages"][-1] == {"role": "user", "content": "say hi"}
+
+
+def test_no_memory_context_means_no_extra_system_message():
+    mock_client = make_mock_client("hi")
+
+    with patch("app.llm.get_openai_client", return_value=mock_client):
+        ask_llm(make_settings(), "say hi", full=True)
+
+    _, kwargs = mock_client.chat.completions.create.call_args
+    assert kwargs["messages"] == [{"role": "user", "content": "say hi"}]
 
 
 def test_paid_tier_has_no_token_cap():

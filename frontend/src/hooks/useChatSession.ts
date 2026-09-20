@@ -1,3 +1,4 @@
+import { usePrivy } from "@privy-io/react-auth";
 import { useEffect, useState } from "react";
 import { fetchAsk, type Tier } from "../api";
 import { useFreeUsage } from "./useFreeUsage";
@@ -20,6 +21,7 @@ function makeId(): string {
 }
 
 export function useChatSession() {
+  const { getAccessToken } = usePrivy();
   const freeUsage = useFreeUsage("chat", 3);
   const unlock = useTileUnlock("chat");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -51,7 +53,15 @@ export function useChatSession() {
     setStatus("thinking");
 
     try {
-      const result = await fetchAsk(prompt, { wallet: unlock.walletAddress, quality });
+      // Only fetch a token on paid calls — memory (what the token unlocks)
+      // is itself a paid perk, so there's no reason to pay the token-fetch
+      // cost on free-tier requests.
+      const accessToken = isPaid ? await getAccessToken() : undefined;
+      const result = await fetchAsk(prompt, {
+        wallet: unlock.walletAddress,
+        quality,
+        accessToken: accessToken ?? undefined,
+      });
       setMessages((m) => [...m, { id: makeId(), role: "assistant", content: result.response }]);
       setStatus("idle");
 

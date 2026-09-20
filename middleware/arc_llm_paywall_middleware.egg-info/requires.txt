@@ -5,6 +5,7 @@ openai>=1.40
 pydantic>=2.8
 python-dotenv>=1.0
 redis>=5.0
+pyjwt[crypto]>=2.8
 
 [dev]
 pytest>=8.0

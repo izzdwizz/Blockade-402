@@ -8,10 +8,13 @@ export function WalletConnectButton() {
   const { login, authenticated } = usePrivy();
   const { wallets } = useWallets();
   const walletAddress = wallets[0]?.address;
-
+  console.log(walletAddress);
+  const copyWallet = () => {
+    navigator.clipboard.writeText(walletAddress);
+  };
   if (authenticated && walletAddress) {
     return (
-      <span className="wallet-button">
+      <span className="wallet-button" onClick={copyWallet}>
         <span className="wallet-button__dot" />
         {truncate(walletAddress)}
       </span>

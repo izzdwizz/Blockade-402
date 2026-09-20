@@ -28,6 +28,8 @@ class Settings:
     paid_session_ttl_seconds: int  # how long a wallet stays unlocked for a tile after paying
     cors_origins: list[str]
     redis_url: str  # Render injects this automatically when a Key Value service is linked
+    privy_app_id: str
+    privy_verification_key: str  # PEM public key (ES256) from Privy Dashboard > Configuration > App settings
 
 
 @lru_cache
@@ -48,4 +50,9 @@ def get_settings() -> Settings:
             if origin.strip()
         ],
         redis_url=os.environ.get("REDIS_URL", "redis://localhost:6379/0"),
+        privy_app_id=os.environ.get("PRIVY_APP_ID", ""),
+        # Stored in .env as one line with literal \n escapes (not real
+        # newlines — those get mangled by some dashboard env-var UIs); turn
+        # them into real newlines here before handing the PEM to PyJWT.
+        privy_verification_key=os.environ.get("PRIVY_VERIFICATION_KEY", "").replace("\\n", "\n"),
     )

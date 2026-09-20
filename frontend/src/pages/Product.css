@@ -21,8 +21,9 @@
     #2b244706; */
   /* background: repeating-linear-gradient(45deg, #1d1930 0 12px, #2b2447 0 24px); */
   background:
-    repeating-linear-gradient(0deg, #1d193008 0 1px, #00000002 1px 150px),
-    repeating-linear-gradient(90deg, #1d193008 0 1px, #00000002 1px 150px) #fff;
+    repeating-linear-gradient(0deg, #1d193008 0 1.5px, #00000002 1px 150px),
+    repeating-linear-gradient(90deg, #1d193008 0 1.5px, #00000002 1px 150px)
+      #fff;
 }
 
 /* TopBar */

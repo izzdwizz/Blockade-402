@@ -32,6 +32,32 @@ describe("fetchAsk", () => {
     expect(calledUrl).toContain("wallet=0xabc");
     expect(calledUrl).toContain("quality=brief");
   });
+
+  it("sets the Authorization header when accessToken is provided", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      status: 200,
+      json: async () => ({ response: "42", tier: "paid" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchAsk("hello", { wallet: "0xabc", accessToken: "tok123" });
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer tok123");
+  });
+
+  it("omits the Authorization header when accessToken is not provided", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      status: 200,
+      json: async () => ({ response: "42", tier: "free" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchAsk("hello");
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect((init.headers as Record<string, string>).Authorization).toBeUndefined();
+  });
 });
 
 describe("fetchUnlock", () => {

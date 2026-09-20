@@ -10,7 +10,9 @@ def get_openai_client(api_key: str, base_url: str) -> OpenAI:
     return OpenAI(api_key=api_key, base_url=base_url or None)
 
 
-def ask_llm(settings: Settings, prompt: str, full: bool = True) -> str:
+def ask_llm(
+    settings: Settings, prompt: str, full: bool = True, memory_context: str | None = None
+) -> str:
     client = get_openai_client(settings.openai_api_key, settings.llm_base_url)
     messages = [{"role": "user", "content": prompt}]
     if not full:
@@ -21,6 +23,11 @@ def ask_llm(settings: Settings, prompt: str, full: bool = True) -> str:
                 "content": "Answer in one short sentence only. This is a free-tier preview.",
             },
         )
+    if memory_context:
+        # Inserted after the free-tier check so it stays closest to the
+        # user's actual prompt. In practice the two never collide —
+        # memory_context is only ever set when full=True (paid).
+        messages.insert(0, {"role": "system", "content": memory_context})
 
     extra_params = {}
     if "gpt-oss" in settings.llm_model:

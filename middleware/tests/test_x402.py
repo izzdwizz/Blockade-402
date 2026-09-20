@@ -1,3 +1,4 @@
+from dataclasses import replace
 from unittest.mock import MagicMock
 
 import httpx
@@ -7,10 +8,18 @@ from openai import APIError
 
 from app.chain import ChainClient, PaymentEvent
 from app.config import Settings
-from app.main import app, get_chain_client_dep, get_settings_dep, get_tile_store_dep
+from app.main import (
+    app,
+    get_chain_client_dep,
+    get_memory_store_dep,
+    get_settings_dep,
+    get_tile_store_dep,
+)
+from app.memory import InMemoryMemoryStore
 from app.tile_store import InMemoryTileUnlockStore
 from app.tiles import price_for_tile
 from app.x402 import compute_request_hash
+from tests.conftest import make_privy_token
 
 
 @pytest.fixture
@@ -27,6 +36,8 @@ def settings() -> Settings:
         paid_session_ttl_seconds=3600,
         cors_origins=["http://localhost:5173"],
         redis_url="redis://localhost:6379/0",
+        privy_app_id="",
+        privy_verification_key="",
     )
 
 
@@ -41,11 +52,17 @@ def store() -> InMemoryTileUnlockStore:
 
 
 @pytest.fixture
-def client(settings, mock_chain_client, store, monkeypatch):
-    monkeypatch.setattr("app.main.ask_llm", lambda settings, prompt, full=True: "42")
+def memory_store(settings) -> InMemoryMemoryStore:
+    return InMemoryMemoryStore(settings)
+
+
+@pytest.fixture
+def client(settings, mock_chain_client, store, memory_store, monkeypatch):
+    monkeypatch.setattr("app.main.ask_llm", lambda settings, prompt, full=True, memory_context=None: "42")
     app.dependency_overrides[get_settings_dep] = lambda: settings
     app.dependency_overrides[get_chain_client_dep] = lambda: mock_chain_client
     app.dependency_overrides[get_tile_store_dep] = lambda: store
+    app.dependency_overrides[get_memory_store_dep] = lambda: memory_store
     yield TestClient(app)
     app.dependency_overrides.clear()
 
@@ -67,8 +84,105 @@ def test_ask_serves_paid_tier_once_wallet_is_unlocked(client, store):
     assert response.json() == {"response": "42", "tier": "paid"}
 
 
+# --- /ask + memory ------------------------------------------------------
+
+
+def _settings_with_privy(settings: Settings, public_pem: str) -> Settings:
+    return replace(settings, privy_app_id="app-123", privy_verification_key=public_pem)
+
+
+def test_ask_with_valid_token_and_paid_wallet_engages_memory(
+    client, store, memory_store, settings, privy_keypair
+):
+    private_pem, public_pem = privy_keypair
+    app.dependency_overrides[get_settings_dep] = lambda: _settings_with_privy(settings, public_pem)
+    store.mark_unlocked("0xAbC", "chat")
+    token = make_privy_token(private_pem, sub="did:privy:u1", aud="app-123")
+
+    response = client.get(
+        "/ask",
+        params={"prompt": "hello", "wallet": "0xabc"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    blob = memory_store.get_memory("did:privy:u1")
+    assert [(t.role, t.content) for t in blob.recent_turns] == [
+        ("user", "hello"),
+        ("assistant", "42"),
+    ]
+
+
+def test_ask_with_valid_token_but_unpaid_wallet_skips_memory(
+    client, memory_store, settings, privy_keypair
+):
+    private_pem, public_pem = privy_keypair
+    app.dependency_overrides[get_settings_dep] = lambda: _settings_with_privy(settings, public_pem)
+    token = make_privy_token(private_pem, sub="did:privy:u1", aud="app-123")
+
+    response = client.get(
+        "/ask",
+        params={"prompt": "hello"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert memory_store.get_memory("did:privy:u1").recent_turns == []
+
+
+def test_ask_with_paid_wallet_but_no_token_skips_memory(client, store, memory_store, settings):
+    store.mark_unlocked("0xAbC", "chat")
+
+    response = client.get("/ask", params={"prompt": "hello", "wallet": "0xabc"})
+
+    assert response.status_code == 200
+    assert response.json()["tier"] == "paid"
+    # Nothing to assert a specific user's memory against — no verified
+    # identity means no memory was ever consulted for this call at all.
+
+
+def test_ask_with_invalid_token_and_paid_wallet_degrades_gracefully(
+    client, store, memory_store, settings, privy_keypair
+):
+    _, public_pem = privy_keypair
+    app.dependency_overrides[get_settings_dep] = lambda: _settings_with_privy(settings, public_pem)
+    store.mark_unlocked("0xAbC", "chat")
+
+    response = client.get(
+        "/ask",
+        params={"prompt": "hello", "wallet": "0xabc"},
+        headers={"Authorization": "Bearer not-a-real-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"response": "42", "tier": "paid"}
+
+
+def test_memory_write_failure_does_not_fail_the_response(
+    client, store, settings, privy_keypair, monkeypatch
+):
+    private_pem, public_pem = privy_keypair
+    app.dependency_overrides[get_settings_dep] = lambda: _settings_with_privy(settings, public_pem)
+    store.mark_unlocked("0xAbC", "chat")
+    token = make_privy_token(private_pem, sub="did:privy:u1", aud="app-123")
+
+    broken_store = MagicMock()
+    broken_store.get_memory.return_value = MagicMock(recent_turns=[], summary="", goal_log=[])
+    broken_store.append_chat_turn.side_effect = RuntimeError("redis is down")
+    app.dependency_overrides[get_memory_store_dep] = lambda: broken_store
+
+    response = client.get(
+        "/ask",
+        params={"prompt": "hello", "wallet": "0xabc"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"response": "42", "tier": "paid"}
+
+
 def test_llm_provider_error_returns_502_with_cors_headers(client, monkeypatch):
-    def raise_api_error(settings, prompt, full=True):
+    def raise_api_error(settings, prompt, full=True, memory_context=None):
         request = httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions")
         raise APIError("invalid api key", request=request, body=None)
 

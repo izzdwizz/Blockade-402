@@ -19,16 +19,21 @@ export interface AskResult {
 // wallet is already unlocked for the chat tile, brief otherwise). `quality`
 // is accepted for forward compatibility but the server currently only ever
 // honors it downward — an unpaid caller can't request "full" and get it,
-// the wallet's unlocked status is what actually decides that.
+// the wallet's unlocked status is what actually decides that. `accessToken`
+// (a verified Privy token) is what actually turns on persistent memory —
+// only worth passing on paid-tier calls, since memory itself is a paid perk.
 export async function fetchAsk(
   prompt: string,
-  opts: { wallet?: string; quality?: "full" | "brief" } = {},
+  opts: { wallet?: string; quality?: "full" | "brief"; accessToken?: string } = {},
 ): Promise<AskResult> {
   const params = new URLSearchParams({ prompt });
   if (opts.wallet) params.set("wallet", opts.wallet);
   if (opts.quality) params.set("quality", opts.quality);
 
-  const res = await fetch(`${API_BASE_URL}/ask?${params.toString()}`);
+  const headers: HeadersInit = {};
+  if (opts.accessToken) headers["Authorization"] = `Bearer ${opts.accessToken}`;
+
+  const res = await fetch(`${API_BASE_URL}/ask?${params.toString()}`, { headers });
   const body = await res.json();
   return { response: body.response as string, tier: body.tier as Tier };
 }
